@@ -65,6 +65,18 @@ class ApplicationTest {
         val cross=client.post("/register") { header(HttpHeaders.Origin,"https://evil.example"); header(HttpHeaders.Cookie,b.cookie); contentType(ContentType.Application.FormUrlEncoded); setBody("csrf=${b.csrf}") }
         assertEquals(HttpStatusCode.Forbidden,cross.status)
     }
+    @Test fun `sandboxed same origin still requires CSRF and rejects cross site`() = testApplication {
+        application { banketika(config(),FakeGateway()) }; val client=createClient { followRedirects=false }
+        val page=client.get("/login"); val b=browser(page,page.bodyAsText())
+        suspend fun submit(site: String,csrf: String) = client.post("/login") {
+            header(HttpHeaders.Origin,"null"); header("Sec-Fetch-Site",site); header(HttpHeaders.Cookie,b.cookie)
+            contentType(ContentType.Application.FormUrlEncoded)
+            setBody(Parameters.build { append("csrf",csrf); append("login","ivan_26"); append("password","test-password") }.formUrlEncode())
+        }
+        assertEquals(HttpStatusCode.Forbidden,submit("cross-site",b.csrf).status)
+        assertEquals(HttpStatusCode.Forbidden,submit("same-origin","bad").status)
+        assertEquals(HttpStatusCode.SeeOther,submit("same-origin",b.csrf).status)
+    }
     @Test fun `signup without tokens does not authenticate`() = testApplication {
         application { banketika(config(),FakeGateway()) }; val client=createClient { followRedirects=false }
         val page=client.get("/"); val b=browser(page,page.bodyAsText())
@@ -96,6 +108,14 @@ class ApplicationTest {
         val page=client.get("/login"); val b=browser(page,page.bodyAsText())
         val r=client.form("/login",b,mapOf("login" to "admin 26","password" to "test-password-only"))
         assertEquals("admin26@banketika.example",gateway.usedEmail); assertEquals("/admin",r.headers[HttpHeaders.Location])
+    }
+    @Test fun `administrator cannot use internal username instead of configured login`() = testApplication {
+        val gateway=FakeGateway().apply { admin=true }; application { banketika(config(),gateway) }
+        val client=createClient { followRedirects=false }; val page=client.get("/login"); val b=browser(page,page.bodyAsText())
+        val r=client.form("/login",b,mapOf("login" to "admin26","password" to "test-password-only"))
+        assertEquals(HttpStatusCode.BadRequest,r.status)
+        assertContains(r.bodyAsText(),"Неверный логин или пароль")
+        assertEquals(HttpStatusCode.SeeOther,client.get("/admin") { header(HttpHeaders.Cookie,b.cookie) }.status)
     }
     @Test fun `HTML escapes user data`() {
         val actor=Actor(AuthUser(USER),Profile(USER,"<script>alert(1)</script>","+79991234567","a@example.com"),false)

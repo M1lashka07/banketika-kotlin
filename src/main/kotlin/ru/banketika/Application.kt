@@ -59,8 +59,13 @@ fun Application.banketika(config: Config, gateway: Gateway) {
     }
     suspend fun ApplicationCall.form(): Map<String, String> {
         val origin = request.header("Origin")
-        if ((origin != null && origin != config.appUrl) || request.header("Sec-Fetch-Site") == "cross-site")
+        val fetchSite = request.header("Sec-Fetch-Site")
+        // Sandboxed in-app browsers send a literal opaque Origin: null.
+        // Accept that case only with same-origin Fetch Metadata AND valid session CSRF below.
+        val trustedOpaqueOrigin = origin == "null" && fetchSite == "same-origin"
+        if ((origin != null && origin != config.appUrl && !trustedOpaqueOrigin) || fetchSite == "cross-site") {
             throw Rejected(HttpStatusCode.Forbidden, "Запрос пришёл с другого сайта. Откройте форму в Банкетике.")
+        }
         if (request.contentType().withoutParameters() != ContentType.Application.FormUrlEncoded)
             throw Rejected(HttpStatusCode.UnsupportedMediaType, "Отправьте заполненную форму.")
         if ((request.header("Content-Length")?.toLongOrNull() ?: 0) > 16_384)
@@ -99,7 +104,7 @@ fun Application.banketika(config: Config, gateway: Gateway) {
                     gateway.user(tokens.access_token)
                     sessions.authenticate(call, tokens); call.redirect("/cabinet")
                 } else call.html(Views.auth(false, session, mapOf("login" to values["login"].orEmpty()),
-                    problem = "Аккаунт пока не активирован. Администратору нужно настроить регистрацию без подтверждения email в Supabase Auth."))
+                    problem = "Аккаунт пока не активирован. Обратитесь к администратору."))
             } catch (e: FormProblem) { call.html(Views.auth(true, session, values, e.fields, problem = "Проверьте выделенные поля."), HttpStatusCode.UnprocessableEntity) }
             catch (e: ApiProblem) { call.html(Views.auth(true, session, values, problem = friendly(e)), HttpStatusCode.BadRequest) }
         }
@@ -114,6 +119,7 @@ fun Application.banketika(config: Config, gateway: Gateway) {
                 val email = if (login == config.adminLogin) config.adminEmail else login.lowercase() + "@banketika.example"
                 val tokens = gateway.login(email, values["password"].orEmpty())
                 val actor = gateway.actor(tokens.access_token)
+                if (actor.admin && login != config.adminLogin) throw ApiProblem(400, "invalid_credentials")
                 sessions.authenticate(call, tokens)
                 call.redirect(if (actor.admin) "/admin" else "/cabinet")
             } catch (e: FormProblem) { call.html(Views.auth(false, session, values, e.fields), HttpStatusCode.UnprocessableEntity) }
@@ -121,8 +127,10 @@ fun Application.banketika(config: Config, gateway: Gateway) {
         }
         post("/logout") {
             call.form()
-            val jwt = sessions.jwt(sessions.get(call), gateway)
-            try { if (jwt != null) gateway.logout(jwt) } finally { sessions.clear(call) }
+            try {
+                val jwt = sessions.jwt(sessions.get(call), gateway)
+                if (jwt != null) gateway.logout(jwt)
+            } finally { sessions.clear(call) }
             call.redirect("/login")
         }
         get("/cabinet") {
@@ -195,7 +203,7 @@ private fun friendly(e: ApiProblem): String = when (e.code) {
     "user_already_exists" -> "Аккаунт с этим email уже существует. Перейдите ко входу."
     "over_email_send_rate_limit", "over_request_rate_limit" -> "Слишком много попыток. Подождите немного и повторите."
     "weak_password" -> "Пароль слишком простой. Выберите другой пароль."
-    "email_provider_disabled" -> "Вход пока недоступен. Администратору нужно включить провайдер пароля в Supabase Auth."
+    "email_provider_disabled" -> "Вход временно недоступен. Обратитесь к администратору."
     "otp_expired" -> "Ссылка подтверждения устарела или уже использована."
     "not_found" -> "Заявка не найдена или у вас нет доступа к ней."
     "23514" -> "Проверьте поля заявки и убедитесь, что дата и время находятся в будущем."
