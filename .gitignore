@@ -1,0 +1,11 @@
+.gradle/
+build/
+.idea/
+*.iml
+.env
+.env.*
+!.env.example
+.tools/
+.runtime/
+*.log
+test-results-local/
