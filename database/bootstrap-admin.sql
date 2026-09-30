@@ -17,7 +17,7 @@ begin
   values('00000000-0000-0000-0000-000000000000',admin_id,'authenticated','authenticated',
     'admin26@banketika.example',extensions.crypt(password_text,extensions.gen_salt('bf')),now(),
     '{"provider":"email","providers":["email"]}',
-    '{"full_name":"Администратор Банкетики","phone":"+7 (000) 000-00-00"}',now(),now(),'','','','');
+    '{"full_name":"Администратор Банкетики","phone":"+7 (000) 000-00-00","login":"admin 26"}',now(),now(),'','','','');
   insert into auth.identities(user_id,provider_id,identity_data,provider,created_at,updated_at)
   values(admin_id,admin_id::text,jsonb_build_object('sub',admin_id::text,'email','admin26@banketika.example','email_verified',true),'email',now(),now());
   insert into private.administrators(user_id) values(admin_id);

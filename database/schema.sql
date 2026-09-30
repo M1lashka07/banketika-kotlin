@@ -8,6 +8,7 @@ create table private.administrators (
 );
 alter table private.administrators enable row level security;
 revoke all on private.administrators from public, anon, authenticated;
+create policy administrator_no_direct_access on private.administrators for all to authenticated using (false) with check (false);
 
 create function private.is_admin() returns boolean
 language sql stable security definer set search_path = '' as $$
@@ -29,7 +30,7 @@ create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null check (char_length(btrim(full_name)) between 3 and 120),
   phone text not null check (phone ~ '^\+?[0-9 ()-]{10,25}$'),
-  email text not null,
+  login text not null unique,
   created_at timestamptz not null default now()
 );
 alter table public.profiles enable row level security;
@@ -39,12 +40,12 @@ create policy profile_read on public.profiles for select to authenticated
 using (id = (select auth.uid()) or (select private.is_admin()));
 
 -- Only Auth's insert trigger creates profiles. Metadata supplies contact data,
--- never authorization. auth.users.email is authoritative.
+-- never authorization. The login is created by the controlled registration RPC.
 create function private.create_profile() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  insert into public.profiles(id, full_name, phone, email)
-  values(new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'phone', new.email);
+  insert into public.profiles(id, full_name, phone, login)
+  values(new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'phone', new.raw_user_meta_data->>'login');
   return new;
 end;
 $$;

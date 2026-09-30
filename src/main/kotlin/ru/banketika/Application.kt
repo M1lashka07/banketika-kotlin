@@ -90,7 +90,7 @@ fun Application.banketika(config: Config, gateway: Gateway) {
         }
         post("/register") {
             val values = call.form().mapValues { (k,v) -> if (k == "password") v else v.trim() }.toMutableMap()
-            values["email"] = values["email"].orEmpty().lowercase()
+            values["login"] = values["login"].orEmpty().lowercase()
             val session = sessions.get(call)
             try {
                 Validation.registration(values)
@@ -98,35 +98,26 @@ fun Application.banketika(config: Config, gateway: Gateway) {
                 if (tokens.access_token.isNotBlank() && tokens.refresh_token.isNotBlank()) {
                     gateway.user(tokens.access_token)
                     sessions.authenticate(call, tokens); call.redirect("/cabinet")
-                } else call.html(Views.auth(false, session, mapOf("email" to values["email"].orEmpty()),
-                    message = "Проверьте почту: подтвердите email по ссылке в письме. Затем войдите с паролем. До подтверждения вход не выполнен."))
+                } else call.html(Views.auth(false, session, mapOf("login" to values["login"].orEmpty()),
+                    problem = "Аккаунт пока не активирован. Администратору нужно настроить регистрацию без подтверждения email в Supabase Auth."))
             } catch (e: FormProblem) { call.html(Views.auth(true, session, values, e.fields, problem = "Проверьте выделенные поля."), HttpStatusCode.UnprocessableEntity) }
             catch (e: ApiProblem) { call.html(Views.auth(true, session, values, problem = friendly(e)), HttpStatusCode.BadRequest) }
         }
         post("/login") {
             val values = call.form()
             val session = sessions.get(call)
-            val login = values["email"].orEmpty().trim()
+            val login = values["login"].orEmpty().trim()
             try {
-                if (login.isBlank() || values["password"].isNullOrBlank()) throw FormProblem(mapOf("email" to "Введите email или логин и пароль."))
-                val email = if (login == config.adminLogin) config.adminEmail else login.lowercase()
+                if (login.isBlank() || values["password"].isNullOrBlank()) throw FormProblem(mapOf("login" to "Введите логин и пароль."))
+                if (login != config.adminLogin && !Regex("^[a-zA-Z0-9][a-zA-Z0-9._-]{2,31}$").matches(login))
+                    throw FormProblem(mapOf("login" to "Проверьте логин: email не используется для входа."))
+                val email = if (login == config.adminLogin) config.adminEmail else login.lowercase() + "@banketika.example"
                 val tokens = gateway.login(email, values["password"].orEmpty())
                 val actor = gateway.actor(tokens.access_token)
                 sessions.authenticate(call, tokens)
                 call.redirect(if (actor.admin) "/admin" else "/cabinet")
             } catch (e: FormProblem) { call.html(Views.auth(false, session, values, e.fields), HttpStatusCode.UnprocessableEntity) }
             catch (e: ApiProblem) { call.html(Views.auth(false, session, values, problem = friendly(e)), HttpStatusCode.BadRequest) }
-        }
-        get("/auth/confirm") {
-            val hash = call.request.queryParameters["token_hash"].orEmpty()
-            if (!Regex("^[a-zA-Z0-9_-]{20,256}$").matches(hash)) throw Rejected(HttpStatusCode.BadRequest, "Ссылка подтверждения неполная.")
-            call.html(Views.auth(false, sessions.get(call), message = "Подтвердите ваш адрес, чтобы завершить регистрацию.", confirmHash = hash))
-        }
-        post("/auth/confirm") {
-            val values = call.form()
-            val tokens = gateway.verify(values["token_hash"].orEmpty())
-            gateway.user(tokens.access_token)
-            sessions.authenticate(call, tokens); call.redirect("/cabinet")
         }
         post("/logout") {
             call.form()
@@ -198,7 +189,8 @@ private fun message(code: String?): String? = when (code) {
     else -> null
 }
 private fun friendly(e: ApiProblem): String = when (e.code) {
-    "invalid_credentials" -> "Неверный email, логин или пароль."
+    "invalid_credentials" -> "Неверный логин или пароль."
+    "23505" -> "Этот логин уже занят. Выберите другой или перейдите ко входу."
     "email_not_confirmed" -> "Сначала подтвердите email по ссылке из письма."
     "user_already_exists" -> "Аккаунт с этим email уже существует. Перейдите ко входу."
     "over_email_send_rate_limit", "over_request_rate_limit" -> "Слишком много попыток. Подождите немного и повторите."

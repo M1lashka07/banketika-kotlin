@@ -69,7 +69,7 @@ object Views {
         }
     }
 
-    fun auth(register: Boolean, session: Session, values: Map<String, String> = emptyMap(), errors: Map<String, String> = emptyMap(), message: String? = null, problem: String? = null, confirmHash: String? = null): String =
+    fun auth(register: Boolean, session: Session, values: Map<String, String> = emptyMap(), errors: Map<String, String> = emptyMap(), message: String? = null, problem: String? = null): String =
         page(if (register) "Регистрация" else "Вход", if (register) "register" else "login", session) {
             div("auth-layout") {
                 section("welcome") {
@@ -84,19 +84,14 @@ object Views {
                     h2 { +if (register) "Создать аккаунт" else "С возвращением" }
                     p("muted") { +if (register) "Первый шаг к вашему идеальному вечеру." else "Войдите, чтобы продолжить подготовку." }
                     notice(message); notice(problem, true)
-                    if (confirmHash != null) {
-                        form("/auth/confirm", method = FormMethod.post) {
-                            csrf(session); hiddenInput(name = "token_hash") { value = confirmHash }
-                            button(classes = "button full") { +"Подтвердить email и войти" }
-                        }
-                    } else form(if (register) "/register" else "/login", method = FormMethod.post) {
+                    form(if (register) "/register" else "/login", method = FormMethod.post) {
                         csrf(session)
                         if (register) {
                             field("full_name", "Фамилия, имя и отчество", values = values, errors = errors, placeholder = "Иванов Иван Иванович", autocomplete = "name", max = 120)
                             field("phone", "Номер телефона", InputType.tel, values, errors, "+7 (999) 123-45-67", "tel", 25)
                         }
-                        field("email", if (register) "Email" else "Email или логин", if (register) InputType.email else InputType.text,
-                            values, errors, if (register) "you@example.ru" else "Email или логин администратора", if (register) "email" else "username", 254)
+                        field("login", "Логин", InputType.text,
+                            values, errors, if (register) "Например, ivan_26" else "Ваш логин", "username", 32)
                         field("password", "Пароль", InputType.password, errors = errors, placeholder = if (register) "Не менее 8 символов" else "Ваш пароль",
                             autocomplete = if (register) "new-password" else "current-password", max = 128)
                         button(classes = "button full") { +if (register) "Зарегистрироваться →" else "Войти →" }
@@ -105,7 +100,7 @@ object Views {
                         +if (register) "Уже есть аккаунт? " else "Пока нет аккаунта? "
                         a(if (register) "/login" else "/") { +if (register) "Войти" else "Зарегистрироваться" }
                     }
-                    if (register) p("micro") { +"Контактные данные понадобятся для вашей заявки. Если включено подтверждение email, сначала подтвердите адрес в письме." }
+                    if (register) p("micro") { +"Логин: 3–32 латинских символа, цифры, точка, дефис или подчёркивание. Контактный телефон понадобится для вашей заявки." }
                 }
             }
         }
@@ -122,7 +117,7 @@ object Views {
                     div("avatar") { +actor.profile.full_name.take(1).uppercase() }
                     h2 { +actor.profile.full_name }
                     p("role-label") { +if (actor.admin) "Администратор" else "Личный профиль" }
-                    dl { dt { +"Email" }; dd { +actor.profile.email }; dt { +"Телефон" }; dd { +actor.profile.phone } }
+                    dl { dt { +"Логин" }; dd { +actor.profile.login }; dt { +"Телефон" }; dd { +actor.profile.phone } }
                     p("micro") { +"Данные видны вам и администратору, который работает с вашей заявкой." }
                 }
                 section {
@@ -153,7 +148,7 @@ object Views {
                 dt { +"Оплата" }; dd { +Payment.entries.first { it.code == row.payment_method }.label }
             }
             if (owner != null) div("owner-details") {
-                strong { +owner.full_name }; span { +owner.email }; span { +owner.phone }
+                strong { +owner.full_name }; span { +"Логин: ${owner.login}" }; span { +owner.phone }
             }
             div("card-actions") {
                 if (admin) form("/admin/banquets/${row.id}/status", method = FormMethod.post, classes = "status-form") {
@@ -179,7 +174,7 @@ object Views {
             label { htmlFor = "owner_id"; +"Пользователь" }
             select { name = "owner_id"; id = "owner_id"; required = true
                 option { value = ""; +"Выберите зарегистрированного пользователя" }
-                owners.forEach { option { value = it.id; selected = it.id == values["owner_id"]; +"${it.full_name} · ${it.email}" } }
+                owners.forEach { option { value = it.id; selected = it.id == values["owner_id"]; +"${it.full_name} · ${it.login}" } }
             }
             errors["owner_id"]?.let { small("field-error") { +it } }
         }

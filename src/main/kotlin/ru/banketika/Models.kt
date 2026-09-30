@@ -11,7 +11,7 @@ enum class Payment(val code: String, val label: String) {
 enum class Status(val code: String, val label: String) {
     PENDING("pending", "На рассмотрении"), ACTIVE("active", "В работе"), COMPLETED("completed", "Завершена")
 }
-@Serializable data class Profile(val id: String, val full_name: String, val phone: String, val email: String)
+@Serializable data class Profile(val id: String, val full_name: String, val phone: String, val login: String)
 @Serializable data class Banquet(
     val id: String, val owner_id: String, val title: String, val venue: String,
     val event_at: String, val payment_method: String, val status: String, val created_at: String = ""
@@ -37,8 +37,8 @@ object Validation {
         val phone = values["phone"].orEmpty().trim()
         if (!Regex("^\\+?[0-9 ()-]{10,25}$").matches(phone) || phone.count(Char::isDigit) !in 10..15)
             errors["phone"] = "Укажите телефон из 10–15 цифр, например +7 (999) 123-45-67."
-        if (!Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(values["email"].orEmpty()) || values["email"].orEmpty().length > 254)
-            errors["email"] = "Введите корректный email."
+        if (!Regex("^[a-z0-9][a-z0-9._-]{2,31}$").matches(values["login"].orEmpty()))
+            errors["login"] = "Логин: 3–32 латинских символа, цифры, точка, дефис или подчёркивание."
         if (values["password"].orEmpty().length !in 8..128)
             errors["password"] = "Пароль должен содержать от 8 до 128 символов."
         if (errors.isNotEmpty()) throw FormProblem(errors)

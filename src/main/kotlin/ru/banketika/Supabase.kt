@@ -15,7 +15,6 @@ interface Gateway {
     suspend fun signup(values: Map<String, String>): Tokens
     suspend fun login(email: String, password: String): Tokens
     suspend fun refresh(refreshToken: String): Tokens
-    suspend fun verify(hash: String): Tokens
     suspend fun logout(jwt: String)
     suspend fun user(jwt: String): AuthUser
     suspend fun actor(jwt: String): Actor
@@ -52,11 +51,14 @@ class Supabase(private val config: Config, val client: HttpClient = httpClient()
     }
     override suspend fun signup(values: Map<String, String>): Tokens {
         val body = buildJsonObject {
-            put("email", values.getValue("email")); put("password", values.getValue("password"))
-            putJsonObject("data") { put("full_name", values.getValue("full_name")); put("phone", values.getValue("phone")) }
+            put("email", values.getValue("login") + "@banketika.example"); put("password", values.getValue("password"))
+            putJsonObject("data") {
+                put("login", values.getValue("login")); put("full_name", values.getValue("full_name")); put("phone", values.getValue("phone"))
+            }
         }
-        // With email confirmation enabled, signup returns a user WITHOUT access_token.
-        return request(HttpMethod.Post, "/auth/v1/signup?redirect_to=${(config.appUrl + "/login").encodeURLParameter()}", body = body).body()
+        // Standard Auth API. For login-only accounts disable Confirm email in Auth settings.
+        // Never fabricate a session when the configured Auth flow returns no tokens.
+        return request(HttpMethod.Post, "/auth/v1/signup", body = body).body()
     }
     override suspend fun login(email: String, password: String): Tokens =
         request(HttpMethod.Post, "/auth/v1/token?grant_type=password", body = buildJsonObject {
@@ -64,18 +66,16 @@ class Supabase(private val config: Config, val client: HttpClient = httpClient()
         }).body()
     override suspend fun refresh(refreshToken: String): Tokens =
         request(HttpMethod.Post, "/auth/v1/token?grant_type=refresh_token", body = buildJsonObject { put("refresh_token", refreshToken) }).body()
-    override suspend fun verify(hash: String): Tokens =
-        request(HttpMethod.Post, "/auth/v1/verify", body = buildJsonObject { put("token_hash", hash); put("type", "email") }).body()
     override suspend fun logout(jwt: String) { request(HttpMethod.Post, "/auth/v1/logout?scope=local", jwt) }
     override suspend fun user(jwt: String): AuthUser = request(HttpMethod.Get, "/auth/v1/user", jwt).body()
     override suspend fun actor(jwt: String): Actor {
         val user = user(jwt) // Auth validates the JWT; never trust an unverified cookie or metadata role.
-        val profile: List<Profile> = request(HttpMethod.Get, "/rest/v1/profiles?id=eq.${user.id}&select=id,full_name,phone,email", jwt).body()
+        val profile: List<Profile> = request(HttpMethod.Get, "/rest/v1/profiles?id=eq.${user.id}&select=id,full_name,phone,login", jwt).body()
         val admin: Boolean = request(HttpMethod.Post, "/rest/v1/rpc/admin_access", jwt, buildJsonObject {}).body()
         return Actor(user, profile.singleOrNull() ?: throw ApiProblem(403, "profile_missing"), admin)
     }
     override suspend fun profiles(jwt: String): List<Profile> =
-        request(HttpMethod.Get, "/rest/v1/profiles?select=id,full_name,phone,email&order=full_name.asc", jwt).body()
+        request(HttpMethod.Get, "/rest/v1/profiles?select=id,full_name,phone,login&order=full_name.asc", jwt).body()
     override suspend fun banquets(jwt: String, owner: String?): List<Banquet> =
         request(HttpMethod.Get, "/rest/v1/banquets?select=*&order=created_at.desc" + (owner?.let { "&owner_id=eq.$it" } ?: ""), jwt).body()
     override suspend fun create(jwt: String, banquet: NewBanquet) { request(HttpMethod.Post, "/rest/v1/banquets", jwt, banquet) }
