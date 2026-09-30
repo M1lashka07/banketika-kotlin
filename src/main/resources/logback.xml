@@ -1,0 +1,8 @@
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder><pattern>%d{HH:mm:ss} %-5level %logger{24} - %msg%n</pattern></encoder>
+  </appender>
+  <!-- Do not log request bodies, passwords, JWTs, cookies or email-link query strings. -->
+  <root level="WARN"><appender-ref ref="CONSOLE"/></root>
+  <logger name="ru.banketika" level="INFO"/>
+</configuration>
