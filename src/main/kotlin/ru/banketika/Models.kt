@@ -52,10 +52,15 @@ object Validation {
         if (venue.length !in 3..250) errors["venue"] = "Место проведения: от 3 до 250 символов."
         val payment = Payment.entries.find { it.code == values["payment"] }
         if (payment == null) errors["payment"] = "Выберите способ оплаты."
-        val instant = runCatching {
-            LocalDateTime.of(LocalDate.parse(values["date"]), LocalTime.parse(values["time"])).atZone(MOSCOW).toInstant()
-        }.getOrNull()
-        if (instant == null || !instant.isAfter(now)) errors["date"] = "Укажите будущие дату и время по Москве."
+        val date = runCatching { LocalDate.parse(values["date"]) }.getOrNull()
+        val time = runCatching { LocalTime.parse(values["time"]) }.getOrNull()
+        if (date == null) errors["date"] = "Укажите корректную дату."
+        if (time == null) errors["time"] = "Укажите корректное время."
+        val instant = if (date != null && time != null) LocalDateTime.of(date, time).atZone(MOSCOW).toInstant() else null
+        if (date != null && date.isBefore(now.atZone(MOSCOW).toLocalDate()))
+            errors["date"] = "Дата уже прошла. Выберите сегодняшнюю или будущую дату."
+        else if (instant != null && !instant.isAfter(now))
+            errors["time"] = "Время уже прошло. Выберите будущее время по Москве."
         if (runCatching { UUID.fromString(ownerId) }.isFailure) errors["owner_id"] = "Выберите зарегистрированного пользователя."
         if (errors.isNotEmpty()) throw FormProblem(errors)
         return NewBanquet(ownerId, title, venue, instant.toString(), payment!!.code)

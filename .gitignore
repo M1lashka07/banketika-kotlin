@@ -9,3 +9,5 @@ build/
 .runtime/
 *.log
 test-results-local/
+__pycache__/
+*.pyc

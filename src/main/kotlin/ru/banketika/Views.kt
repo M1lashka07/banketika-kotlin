@@ -3,6 +3,7 @@ package ru.banketika
 import kotlinx.html.*
 import kotlinx.html.stream.createHTML
 import java.time.Instant
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 object Views {
@@ -54,7 +55,8 @@ object Views {
     }
     private fun FlowContent.field(
         name: String, title: String, type: InputType = InputType.text, values: Map<String, String> = emptyMap(),
-        errors: Map<String, String> = emptyMap(), placeholder: String = "", autocomplete: String? = null, max: Int? = null
+        errors: Map<String, String> = emptyMap(), placeholder: String = "", autocomplete: String? = null, max: Int? = null,
+        min: String? = null, hint: String? = null
     ) {
         div("field") {
             label { htmlFor = name; +title }
@@ -63,8 +65,12 @@ object Views {
                 if (type != InputType.password) value = values[name].orEmpty()
                 if (autocomplete != null) attributes["autocomplete"] = autocomplete
                 if (max != null) maxLength = max.toString()
-                if (errors[name] != null) { attributes["aria-invalid"] = "true"; attributes["aria-describedby"] = "$name-error" }
+                if (min != null) attributes["min"] = min
+                if (errors[name] != null) attributes["aria-invalid"] = "true"
+                val descriptions = listOfNotNull(hint?.let { "$name-hint" }, errors[name]?.let { "$name-error" })
+                if (descriptions.isNotEmpty()) attributes["aria-describedby"] = descriptions.joinToString(" ")
             }
+            if (hint != null) small("field-hint") { id = "$name-hint"; +hint }
             if (errors[name] != null) small("field-error") { id = "$name-error"; +errors.getValue(name) }
         }
     }
@@ -169,6 +175,7 @@ object Views {
     }
 
     private fun FlowContent.banquetFields(session: Session, values: Map<String, String>, errors: Map<String, String>, owners: List<Profile>? = null) {
+        if (errors.isNotEmpty()) notice("Заявка не отправлена. Исправьте отмеченные поля.", true)
         csrf(session)
         if (owners != null) div("field") {
             label { htmlFor = "owner_id"; +"Пользователь" }
@@ -181,7 +188,8 @@ object Views {
         field("title", "Название банкета", values = values, errors = errors, placeholder = "Например, юбилей мамы", max = 120)
         field("venue", "Место проведения", values = values, errors = errors, placeholder = "Название зала и адрес", max = 250)
         div("form-row") {
-            field("date", "Дата", InputType.date, values, errors)
+            field("date", "Дата", InputType.date, values, errors, min = LocalDate.now(MOSCOW).toString(),
+                hint = "Выберите сегодняшнюю или будущую дату.")
             field("time", "Время по Москве", InputType.time, values, errors)
         }
         fieldSet("payment") {

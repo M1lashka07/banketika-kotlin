@@ -16,7 +16,24 @@ class ValidationTest {
         }
     }
     @Test fun `exact current instant is rejected`() {
-        assertFailsWith<FormProblem> { Validation.banquet(fields + mapOf("date" to "2026-09-30", "time" to "13:00"),owner,now) }
+        val errors=assertFailsWith<FormProblem> { Validation.banquet(fields + mapOf("date" to "2026-09-30", "time" to "13:00"),owner,now) }.fields
+        assertEquals(mapOf("time" to "Время уже прошло. Выберите будущее время по Москве."),errors)
+    }
+    @Test fun `today future Moscow time is accepted and past time points to time field`() {
+        val today=fields + ("date" to "2026-09-30")
+        assertEquals("2026-09-30T11:00:00Z",Validation.banquet(today + ("time" to "14:00"),owner,now).event_at)
+        val errors=assertFailsWith<FormProblem> { Validation.banquet(today + ("time" to "12:59"),owner,now) }.fields
+        assertEquals(mapOf("time" to "Время уже прошло. Выберите будущее время по Москве."),errors)
+    }
+    @Test fun `malformed date and time point to their respective fields`() {
+        val dateErrors=assertFailsWith<FormProblem> { Validation.banquet(fields + ("date" to "2027-02-30"),owner,now) }.fields
+        assertEquals(mapOf("date" to "Укажите корректную дату."),dateErrors)
+        val timeErrors=assertFailsWith<FormProblem> { Validation.banquet(fields + ("time" to "99:99"),owner,now) }.fields
+        assertEquals(mapOf("time" to "Укажите корректное время."),timeErrors)
+    }
+    @Test fun `past date explains which date to choose`() {
+        val errors=assertFailsWith<FormProblem> { Validation.banquet(fields + ("date" to "1111-11-11"),owner,now) }.fields
+        assertEquals(mapOf("date" to "Дата уже прошла. Выберите сегодняшнюю или будущую дату."),errors)
     }
     @Test fun `unknown payment and invalid owner rejected`() {
         val errors = assertFailsWith<FormProblem> { Validation.banquet(fields + ("payment" to "crypto"),"other",now) }.fields

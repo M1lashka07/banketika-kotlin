@@ -5,6 +5,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import java.time.LocalDate
 import kotlin.test.*
 
 private const val USER = "00000000-0000-0000-0000-000000000001"
@@ -102,6 +103,32 @@ class ApplicationTest {
         val r=client.form("/banquets",b,mapOf("title" to "Вечер","venue" to "Москва","date" to "2099-01-01","time" to "18:00","payment" to "cash","owner_id" to OTHER,"status" to "completed"))
         assertEquals(HttpStatusCode.SeeOther,r.status); assertEquals(USER,gateway.created!!.owner_id)
         client.form("/banquets/$ID/delete",b); assertEquals(USER,gateway.deleteOwner)
+    }
+    @Test fun `past banquet date shows clear error preserves fields and can be corrected`() = testApplication {
+        val gateway=FakeGateway(); application { banketika(config(),gateway) }
+        val client=createClient { followRedirects=false }; val b=client.login()
+        val page=client.get("/banquets/new") { header(HttpHeaders.Cookie,b.cookie) }.bodyAsText()
+        fun input(html: String,name: String): String = Regex("<input\\b[^>]*>").findAll(html)
+            .map { it.value }.first { it.contains("name=\"$name\"") }
+        assertContains(input(page,"date"),"min=\"${LocalDate.now(MOSCOW)}\"")
+        val values=mapOf("title" to "Семейный вечер","venue" to "Зал на Тверской, 12","date" to "1111-11-11","time" to "11:11","payment" to "card")
+        val rejected=client.form("/banquets",b,values)
+        val html=rejected.bodyAsText()
+        assertEquals(HttpStatusCode.UnprocessableEntity,rejected.status)
+        assertContains(html,"Заявка не отправлена. Исправьте отмеченные поля.")
+        assertContains(html,"Дата уже прошла. Выберите сегодняшнюю или будущую дату.")
+        listOf("title","venue","date","time").forEach { name ->
+            assertContains(input(html,name),"value=\"${values.getValue(name)}\"")
+        }
+        val selectedPayment=Regex("<input\\b[^>]*>").findAll(html).map { it.value }
+            .first { it.contains("name=\"payment\"") && it.contains("value=\"card\"") }
+        assertContains(selectedPayment,"checked")
+        assertNull(gateway.created)
+        val corrected=client.form("/banquets",b,values + ("date" to "2099-01-01"))
+        assertEquals(HttpStatusCode.SeeOther,corrected.status)
+        assertEquals("/cabinet?done=created",corrected.headers[HttpHeaders.Location])
+        assertEquals("2099-01-01T08:11:00Z",gateway.created!!.event_at)
+        assertEquals("card",gateway.created!!.payment_method)
     }
     @Test fun `administrator alias uses Auth and protected role`() = testApplication {
         val gateway=FakeGateway().apply { admin=true }; application { banketika(config(),gateway) }; val client=createClient { followRedirects=false }

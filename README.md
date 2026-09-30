@@ -102,3 +102,5 @@ POST маршруты: `/register`, `/login`, `/logout`, `/banquets`, `/banquets
 `.env`, `.runtime`, `.tools`, кэши и результаты сборки исключены из Git. **Service role/secret key приложению не нужен.** Не добавляйте такие ключи в клиентские файлы или GitHub.
 
 Официальные источники: [Ktor HTML DSL](https://ktor.io/docs/server-html-dsl.html), [Kotlin releases](https://kotlinlang.org/docs/releases.html), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [Supabase Auth](https://supabase.com/docs/guides/auth/passwords).
+
+Перенос на компьютер колледжа и отличия версии с MySQL/phpMyAdmin описаны в [инструкции](docs/college-transfer.md).
