@@ -62,7 +62,7 @@ object Views {
                 id = name; required = true; this.placeholder = placeholder
                 if (type != InputType.password) value = values[name].orEmpty()
                 if (autocomplete != null) attributes["autocomplete"] = autocomplete
-                if (max != null) maxLength = max
+                if (max != null) maxLength = max.toString()
                 if (errors[name] != null) { attributes["aria-invalid"] = "true"; attributes["aria-describedby"] = "$name-error" }
             }
             if (errors[name] != null) small("field-error") { id = "$name-error"; +errors.getValue(name) }
