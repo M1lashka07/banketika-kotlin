@@ -5,6 +5,7 @@ plugins {
 }
 
 repositories { mavenCentral() }
+providers.gradleProperty("banketikaBuildDir").orNull?.let { layout.buildDirectory.set(file(it)) }
 
 val ktorVersion = "3.6.0"
 dependencies {

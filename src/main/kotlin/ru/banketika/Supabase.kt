@@ -40,7 +40,12 @@ class Supabase(private val config: Config, val client: HttpClient = httpClient()
             if (jwt != null) bearerAuth(jwt)
             contentType(ContentType.Application.Json)
             header("Prefer", "return=representation")
-            if (body != null) setBody(body)
+            if (body != null) setBody(when (body) {
+                is JsonElement -> body.toString()
+                is NewBanquet -> json.encodeToString(NewBanquet.serializer(), body)
+                is StatusChange -> json.encodeToString(StatusChange.serializer(), body)
+                else -> error("Unsupported Supabase request body")
+            })
         }
         if (response.status.value !in 200..299) {
             val error = runCatching { json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
